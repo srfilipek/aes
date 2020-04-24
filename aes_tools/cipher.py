@@ -13,111 +13,130 @@ KEY_LEN_TO_ROUNDS = {
     32: 14,  # 256-bit
 }
 
-
-class State(object):
+class RoundState:
     """Dummy object to quickly hold and build up AES intermediate state
     """
-    start = None
     s_box = None
     s_row = None
     m_col = None
     k_sch = None
-    out = None
-    fout = None
+    add_k = None
+
+
+class StateTracker:
+    """Object to aid in keeping track of round states
+
+    Attributes, other than append(), start, and result, are retreived from the
+    latest round.
+
+    Each round's RoundState object can be retreived by index lookup.
+    """
+
+    def __init__(self):
+        self._rounds = []
+        self.start = None
+        self.result = None
+
+    def new_round(self):
+        self._rounds.append(RoundState())
+
+    @property
+    def round(self):
+        """The latest round"""
+        return self._rounds[-1]
+
+    def __getitem__(self, i):
+        return self._rounds[i]
+
+    def __len__(self):
+        return len(self._rounds)
 
 
 def encrypt_explicit(inb, key, Nr=10, Nb=4):
     """Encrypt the given block with the given key.
 
     Returns:
-        Array of State objects
+        A StateTracker object
+    
+    The StateTracker contains an array of RoundState objects. This allows
+    for inspection of intermediate state of the AES encryption operation.
 
-    The returned array of State objects allows for inspection of intermediate
-    state of the AES encryption operation.
-
-    To get the output, use res[-1].fout
+    To get the output, use state_tracker.result
     """
     if len(inb) != 4 * Nb:
         raise ValueError("Invalid input block length: %d" % (len(inb),))
 
-    tracker = []
+    t = StateTracker()
     w = ops.key_expansion(key, Nr, Nb)
 
-    tracker.append(State())
-    t = tracker[-1]
+    t.new_round()
 
     t.start = state = inb.reshape(4, Nb).T
-    t.k_sch = w[:Nb].T
-    t.add_k = state = ops.add_round_key(state, tracker[0].k_sch)
+    t.round.k_sch = w[:Nb].T
+    t.round.add_k = state = ops.add_round_key(state, t.round.k_sch)
 
     for r in range(1, Nr):
-        tracker.append(State())
-        t = tracker[-1]
-        t.start = state
-        t.s_box = state = ops.sub_bytes(state)
-        t.s_row = state = ops.shift_rows(state)
-        t.m_col = state = ops.mix_columns(state)
-        t.k_sch = w[r * Nb: (r + 1) * Nb].T
-        t.add_k = state = ops.add_round_key(state, t.k_sch)
-        t.fout = state.T.reshape(16,)
+        t.new_round()
+        t.round.s_box = state = ops.sub_bytes(state)
+        t.round.s_row = state = ops.shift_rows(state)
+        t.round.m_col = state = ops.mix_columns(state)
+        t.round.k_sch = w[r * Nb: (r + 1) * Nb].T
+        t.round.add_k = state = ops.add_round_key(state, t.round.k_sch)
 
-    tracker.append(State())
-    t = tracker[-1]
-    t.start = state
-    t.s_box = state = ops.sub_bytes(state)
-    t.s_row = state = ops.shift_rows(state)
-    t.k_sch = w[Nr * Nb: (Nr + 1) * Nb].T
-    t.add_k = state = ops.add_round_key(state, t.k_sch)
-    t.fout = state.T.reshape(16,)
+    t.new_round()
+    t.round.s_box = state = ops.sub_bytes(state)
+    t.round.s_row = state = ops.shift_rows(state)
+    t.round.k_sch = w[Nr * Nb: (Nr + 1) * Nb].T
+    t.round.add_k = state = ops.add_round_key(state, t.round.k_sch)
 
-    return tracker
+    t.result = state.T.reshape(16,)
+
+    return t
 
 
 def decrypt_explicit(inb, key, Nr=10, Nb=4):
     """Decrypt the given block with the given key.
 
     Returns:
-        Array of State objects
+        A StateTracker object
 
-    The returned array of State objects allows for inspection of intermediate
-    state of the AES encryption operation.
+    The StateTracker contains an array of RoundState objects. This allows
+    for inspection of intermediate state of the AES encryption operation.
 
-    To get the output, use res[-1].fout
+    To get the output, use state_tracker.result
     """
     if len(inb) != 4 * Nb:
         raise ValueError("Invalid input block length: %d" % (len(inb),))
 
     w = ops.key_expansion(key, Nr, Nb)
 
-    tracker = []
-    tracker.append(State())
-    t = tracker[-1]
+    t = StateTracker()
+    t.new_round()
 
     t.start = state = inb.reshape(4, Nb).T
-    t.k_sch = w[Nr * Nb: (Nr + 1) * Nb].T
-    t.add_k = state = ops.add_round_key(state, t.k_sch)
-    t.s_row = state = ops.shift_rows_inv(state)
-    t.s_box = state = ops.sub_bytes_inv(state)
+    t.round.k_sch = w[Nr * Nb: (Nr + 1) * Nb].T
+    t.round.add_k = state = ops.add_round_key(state, t.round.k_sch)
+    t.round.s_row = state = ops.shift_rows_inv(state)
+    t.round.s_box = state = ops.sub_bytes_inv(state)
 
     for r in reversed(range(1, Nr)):
-        tracker.append(State())
-        t = tracker[-1]
-        t.k_sch = w[r * Nb: (r + 1) * Nb].T
-        t.add_k = state = ops.add_round_key(state, t.k_sch)
-        t.m_col = state = ops.mix_columns_inv(state)
-        t.s_row = state = ops.shift_rows_inv(state)
-        t.s_box = state = ops.sub_bytes_inv(state)
+        t.new_round()
+        t.round.k_sch = w[r * Nb: (r + 1) * Nb].T
+        t.round.add_k = state = ops.add_round_key(state, t.round.k_sch)
+        t.round.m_col = state = ops.mix_columns_inv(state)
+        t.round.s_row = state = ops.shift_rows_inv(state)
+        t.round.s_box = state = ops.sub_bytes_inv(state)
 
-    tracker.append(State())
-    t = tracker[-1]
-    t.k_sch = w[:Nb].T
-    t.add_k = state = ops.add_round_key(state, t.k_sch)
-    t.fout = state.T.reshape(16,)
+    t.new_round()
+    t.round.k_sch = w[:Nb].T
+    t.round.add_k = state = ops.add_round_key(state, t.round.k_sch)
 
-    return tracker
+    t.result = state.T.reshape(16,)
+
+    return t
 
 
-def _get_rounds(key):
+def _num_rounds(key):
     rounds = KEY_LEN_TO_ROUNDS.get(len(key), None)
     if rounds is None:
         raise ValueError("Invalid key length: %d" % (len(key),))
@@ -125,10 +144,10 @@ def _get_rounds(key):
 
 
 def encrypt(inb, key):
-    rounds = _get_rounds(key)
-    return encrypt_explicit(inb, key, rounds)[-1].fout
+    rounds = _num_rounds(key)
+    return encrypt_explicit(inb, key, rounds).result
 
 
 def decrypt(inb, key):
-    rounds = _get_rounds(key)
-    return decrypt_explicit(inb, key, rounds)[-1].fout
+    rounds = _num_rounds(key)
+    return decrypt_explicit(inb, key, rounds).result
