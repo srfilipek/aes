@@ -2,7 +2,7 @@ from __future__ import division
 
 import numpy as np
 
-from .constants import SBOX, INV_SBOX, RCON, GMUL, MIX_COLS
+from .constants import SBOX, SBOX_INV, RCON, GMUL, MIX_COLS, MIX_COLS_INV
 
 
 def rot_word(word, by=1):
@@ -19,7 +19,7 @@ def sub_word(word):
 def sub_word_inv(word):
     temp = np.array(word)
     for i in range(len(word)):
-        temp[i] = INV_SBOX[word[i]]
+        temp[i] = SBOX_INV[word[i]]
     return temp
 
 
@@ -28,9 +28,11 @@ def rcon(i):
 
 
 def key_expansion(key, Nr, Nb=4):
-    """
-    key : Input key as a numpy array
-    Nr  : Number of cipher rounds
+    """Subkey expansion
+
+    Args:
+        key: Input key as a numpy array
+        Nr: Number of cipher rounds
     """
     Nk = key.size // Nb  # Number of words in key
     if Nk not in (4, 6, 8):
@@ -89,22 +91,22 @@ def derive_key(sub_key, offset, Nb=4):
 
 
 def add_round_key(state, key):
-    """
-    """
     return state ^ key
 
 
 def sub_bytes(state):
-    """
-    """
     return np.array(
             list(map(lambda x: list(map(lambda y: SBOX[y], x)), state)),
             dtype=np.uint8)
 
 
+def sub_bytes_inv(state):
+    return np.array(
+            list(map(lambda x: list(map(lambda y: SBOX_INV[y], x)), state)),
+            dtype=np.uint8)
+
+
 def shift_rows(state):
-    """
-    """
     result = np.array(state)
     for i in range(1, 4):
         result[i] = rot_word(state[i], i)
@@ -112,8 +114,6 @@ def shift_rows(state):
 
 
 def shift_rows_inv(state):
-    """
-    """
     result = np.array(state)
     for i in range(1, 4):
         result[i] = rot_word(state[i], -i)
@@ -121,8 +121,7 @@ def shift_rows_inv(state):
 
 
 def gmul(a, b):
-    """
-    Use for values of 'a' outside (1,2,3)
+    """Use for values of 'a' outside (1,2,3)
     """
     p = 0
     for counter in range(8):
@@ -134,29 +133,45 @@ def gmul(a, b):
         if hi_bit_set:
             a ^= 0x1b
         b >>= 1
+
     return p
 
 
 def mix_column(col):
-    """
-    """
     result = np.array(col)
+    coefs = MIX_COLS
     for i in range(len(col)):
-        # Factor of ~10 speedup if we lookup instead of calculate
         result[i] = (
-                GMUL[MIX_COLS[i, 0] - 1][col[0]] ^
-                GMUL[MIX_COLS[i, 1] - 1][col[1]] ^
-                GMUL[MIX_COLS[i, 2] - 1][col[2]] ^
-                GMUL[MIX_COLS[i, 3] - 1][col[3]])
-        # result[i] = gmul(coefs[i,0], col[0]) ^ gmul(coefs[i,1], col[1]) ^ \
-        #            gmul(coefs[i,2], col[2]) ^ gmul(coefs[i,3], col[3])
+            gmul(coefs[i, 0], col[0]) ^
+            gmul(coefs[i, 1], col[1]) ^
+            gmul(coefs[i, 2], col[2]) ^
+            gmul(coefs[i, 3], col[3])
+        )
     return result
 
 
 def mix_columns(state):
-    """
-    """
     result = np.array(state.T)
     for col in range(result.shape[0]):
         result[col] = mix_column(result[col])
+    return result.T
+
+
+def mix_column_inv(col):
+    result = np.array(col)
+    coefs = MIX_COLS_INV
+    for i in range(len(col)):
+        result[i] = (
+            gmul(coefs[i, 0], col[0]) ^
+            gmul(coefs[i, 1], col[1]) ^
+            gmul(coefs[i, 2], col[2]) ^
+            gmul(coefs[i, 3], col[3])
+        )
+    return result
+
+
+def mix_columns_inv(state):
+    result = np.array(state.T)
+    for col in range(result.shape[0]):
+        result[col] = mix_column_inv(result[col])
     return result.T

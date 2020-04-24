@@ -32,7 +32,54 @@ def encrypt_explicit(inb, key, Nr=10, Nb=4):
     Returns:
         Array of State objects
 
-    The returned  array of State objects allows for inspection of intermediate
+    The returned array of State objects allows for inspection of intermediate
+    state of the AES encryption operation.
+
+    To get the output, use res[-1].fout
+    """
+    if len(inb) != 4 * Nb:
+        raise ValueError("Invalid input block length: %d" % (len(inb),))
+
+    tracker = []
+    w = ops.key_expansion(key, Nr, Nb)
+
+    tracker.append(State())
+    t = tracker[-1]
+
+    t.start = state = inb.reshape(4, Nb).T
+    t.k_sch = w[:Nb].T
+    t.add_k = state = ops.add_round_key(state, tracker[0].k_sch)
+
+    for r in range(1, Nr):
+        tracker.append(State())
+        t = tracker[-1]
+        t.start = state
+        t.s_box = state = ops.sub_bytes(state)
+        t.s_row = state = ops.shift_rows(state)
+        t.m_col = state = ops.mix_columns(state)
+        t.k_sch = w[r * Nb: (r + 1) * Nb].T
+        t.add_k = state = ops.add_round_key(state, t.k_sch)
+        t.fout = state.T.reshape(16,)
+
+    tracker.append(State())
+    t = tracker[-1]
+    t.start = state
+    t.s_box = state = ops.sub_bytes(state)
+    t.s_row = state = ops.shift_rows(state)
+    t.k_sch = w[Nr * Nb: (Nr + 1) * Nb].T
+    t.add_k = state = ops.add_round_key(state, t.k_sch)
+    t.fout = state.T.reshape(16,)
+
+    return tracker
+
+
+def decrypt_explicit(inb, key, Nr=10, Nb=4):
+    """Decrypt the given block with the given key.
+
+    Returns:
+        Array of State objects
+
+    The returned array of State objects allows for inspection of intermediate
     state of the AES encryption operation.
 
     To get the output, use res[-1].fout
@@ -44,28 +91,28 @@ def encrypt_explicit(inb, key, Nr=10, Nb=4):
 
     tracker = []
     tracker.append(State())
-    tracker[0].start = state = inb.reshape(4, Nb).T
-    tracker[0].k_sch = w[:Nb].T
-    tracker[0].out = state = ops.add_round_key(state, w[:Nb].T)
+    t = tracker[-1]
 
-    for r in range(1, Nr):
+    t.start = state = inb.reshape(4, Nb).T
+    t.k_sch = w[Nr * Nb: (Nr + 1) * Nb].T
+    t.add_k = state = ops.add_round_key(state, t.k_sch)
+    t.s_row = state = ops.shift_rows_inv(state)
+    t.s_box = state = ops.sub_bytes_inv(state)
+
+    for r in reversed(range(1, Nr)):
         tracker.append(State())
-        tracker[r].start = state
-        tracker[r].s_box = state = ops.sub_bytes(state)
-        tracker[r].s_row = state = ops.shift_rows(state)
-        tracker[r].m_col = state = ops.mix_columns(state)
-        tracker[r].k_sch = w[r * Nb: (r + 1) * Nb].T
-        tracker[r].out = state = \
-            ops.add_round_key(state, w[r * Nb: (r + 1) * Nb].T)
-        tracker[r].fout = state.T.reshape(16,)
+        t = tracker[-1]
+        t.k_sch = w[r * Nb: (r + 1) * Nb].T
+        t.add_k = state = ops.add_round_key(state, t.k_sch)
+        t.m_col = state = ops.mix_columns_inv(state)
+        t.s_row = state = ops.shift_rows_inv(state)
+        t.s_box = state = ops.sub_bytes_inv(state)
 
     tracker.append(State())
-    tracker[Nr].start = state
-    tracker[Nr].s_box = state = ops.sub_bytes(state)
-    tracker[Nr].s_row = state = ops.shift_rows(state)
-    tracker[Nr].k_sch = w[Nr*Nb:(Nr+1)*Nb].T
-    tracker[Nr].out = state = ops.add_round_key(state, w[Nr*Nb:(Nr+1)*Nb].T)
-    tracker[Nr].fout = state.T.reshape(16,)
+    t = tracker[-1]
+    t.k_sch = w[:Nb].T
+    t.add_k = state = ops.add_round_key(state, t.k_sch)
+    t.fout = state.T.reshape(16,)
 
     return tracker
 

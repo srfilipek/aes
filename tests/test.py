@@ -37,10 +37,16 @@ class TestAes(unittest.TestCase):
             cb = np.array(bytearray.fromhex(c))
 
             result = encrypt(pb, kb)
-            self.assertEqual(cb.data, result.data)
+            self.assertEqual(cb.data.hex(), result.data.hex())
 
     def test_decrypt(self):
-        pass
+        for (p, k, c) in self.AES_VECTORS:
+            pb = np.array(bytearray.fromhex(p))
+            kb = np.array(bytearray.fromhex(k))
+            cb = np.array(bytearray.fromhex(c))
+
+            result = decrypt(cb, kb)
+            self.assertEqual(pb.data.hex(), result.data.hex())
 
     def test_derivation(self):
         for (p, k, c) in self.AES_VECTORS:
