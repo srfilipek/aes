@@ -13,6 +13,7 @@ KEY_LEN_TO_ROUNDS = {
     32: 14,  # 256-bit
 }
 
+
 class RoundState:
     """Dummy object to quickly hold and build up AES intermediate state
     """
@@ -57,7 +58,7 @@ def encrypt_explicit(inb, key, Nr=10, Nb=4):
 
     Returns:
         A StateTracker object
-    
+
     The StateTracker contains an array of RoundState objects. This allows
     for inspection of intermediate state of the AES encryption operation.
 
