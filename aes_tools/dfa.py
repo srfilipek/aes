@@ -27,7 +27,7 @@ def stream(f, verbose=False):
     if verbose:
         v = 2
 
-    filtered_input = filtered(f)
+    filtered_input = _filter(f)
     ref = next(filtered_input)
 
     skey = phoenixAES.crack_bytes(filtered_input, ref, verbose=v)
