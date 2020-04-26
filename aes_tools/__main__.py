@@ -28,15 +28,17 @@ def derive(skey, offset):
 
 @cli.command('dfa', short_help='Perform DFA against corrupted ciphertexts')
 @click.option('-f', '--filename', required=True, type=str, help='File path')
+@click.option('-p', '--pause', is_flag=True, help='Pause upon completion')
 @click.option('-v', '--verbose', is_flag=True, help='Verbose DFA status')
-def dfa_file(filename, verbose):
+def dfa_file(filename, pause, verbose):
     with open(filename, 'r') as f:
         aes_key = dfa.stream(f, verbose)
 
     click.secho("\nAES (not-so-)secret key:", bold=True)
     click.secho(bytearray(aes_key).hex(), fg="bright_red", bold=True)
 
-    signal.pause()
+    if pause:
+        signal.pause()
 
 
 if __name__ == "__main__":

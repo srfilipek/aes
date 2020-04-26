@@ -1,5 +1,3 @@
-import signal
-
 import click
 import numpy as np
 import phoenixAES
@@ -23,14 +21,13 @@ def _filter(f):
 def stream(f, verbose=False):
     """DFA a file stream
     """
-    v = 1
-    if verbose:
-        v = 2
+    # For phoenixAES: 1 = Normal, 2 = Verbose
+    verbose = 1 + int(verbose)
 
     filtered_input = _filter(f)
     ref = next(filtered_input)
 
-    skey = phoenixAES.crack_bytes(filtered_input, ref, verbose=v)
+    skey = phoenixAES.crack_bytes(filtered_input, ref, verbose=verbose)
     skey = np.array(bytearray.fromhex(skey))
 
     return ops.derive_key(skey, 40)
